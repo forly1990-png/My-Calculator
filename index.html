@@ -19,11 +19,10 @@
         }
         input { font-size: 16px !important; }
 
-        /* 打印/导出 PDF 时的专门排版优化 */
         @media print {
             header, .no-print { display: none !important; }
             body { background: white !important; color: black !important; }
-            .print-container { border: none !important; shadow: none !important; }
+            .print-container { border: none !important; box-shadow: none !important; }
             #itemList { max-height: none !important; overflow: visible !important; }
             .item-card { border: 1px solid #e5e7eb !important; break-inside: avoid; }
         }
@@ -35,10 +34,10 @@
     <header class="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center no-print">
         <h1 class="text-base font-bold flex items-center gap-1.5">🧮 流水明细计算器</h1>
         <div class="flex gap-2">
-            <button onclick="window.print()" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded-lg border border-indigo-400 font-medium transition">
+            <button id="pdfBtn" type="button" class="text-xs bg-indigo-700 active:bg-indigo-900 px-3 py-1.5 rounded-lg border border-indigo-400 font-medium transition">
                 📄 保存 PDF
             </button>
-            <button onclick="clearAllRecords()" class="text-xs bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg font-medium transition">
+            <button onclick="clearAllRecords()" class="text-xs bg-red-500 active:bg-red-700 px-3 py-1.5 rounded-lg font-medium transition">
                 清空
             </button>
         </div>
@@ -47,13 +46,12 @@
     <!-- 主体区域 -->
     <main class="flex-1 p-4 max-w-lg mx-auto w-full flex flex-col space-y-4">
 
-        <!-- 输入与运算操作区（打印时自动隐藏） -->
+        <!-- 输入与运算操作区 -->
         <div class="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-3 no-print">
             <div>
                 <input type="number" step="any" id="numberInput" placeholder="输入数字..." required class="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-xl font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
 
-            <!-- 四则运算按钮组 -->
             <div class="grid grid-cols-4 gap-2">
                 <button onclick="addOp('+')" class="bg-indigo-600 active:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-lg shadow transition">
                     + 加
@@ -69,7 +67,6 @@
                 </button>
             </div>
 
-            <!-- 备注输入 -->
             <div>
                 <input type="text" id="remarkInput" placeholder="添加备注说明（选填，如：肉糕、鳊鱼）" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
             </div>
@@ -77,7 +74,6 @@
 
         <!-- 明细列表区域 -->
         <div class="print-container bg-white rounded-2xl shadow-sm p-4 border border-gray-100 flex flex-col min-h-[300px]">
-            <!-- 打印时的专属抬头 -->
             <div class="hidden print:block mb-4 border-b pb-2">
                 <h2 class="text-xl font-bold">计算明细清单</h2>
                 <p class="text-xs text-gray-500" id="printTime"></p>
@@ -88,7 +84,6 @@
                 <span>当前累积结果</span>
             </div>
 
-            <!-- 列表容器 -->
             <div id="itemList" class="flex-1 overflow-y-auto space-y-2 max-h-[50vh] pr-1">
                 <p class="text-center text-gray-400 text-sm py-12">暂无计算记录，请输入数字进行运算</p>
             </div>
@@ -110,7 +105,6 @@
         </div>
     </footer>
 
-    <!-- 逻辑脚本 -->
     <script>
         const STORAGE_KEY = 'offline_calc_advanced_items';
 
@@ -159,7 +153,6 @@
             const calculatedItems = calculateSequence(rawItems);
             const finalResult = calculatedItems[calculatedItems.length - 1].runningTotal;
 
-            // 显示按计算顺序从上到下排布，更符合阅读习惯
             listEl.innerHTML = calculatedItems.map((item, idx) => {
                 const val = parseFloat(item.val);
                 const opText = idx === 0 ? '初始' : item.op;
@@ -224,7 +217,18 @@
             }
         }
 
-        window.onload = render;
+        // 针对 iOS Safari 专门绑定的点击事件监听
+        document.addEventListener('DOMContentLoaded', () => {
+            render();
+            const pdfBtn = document.getElementById('pdfBtn');
+            if (pdfBtn) {
+                pdfBtn.addEventListener('click', () => {
+                    setTimeout(() => {
+                        window.print();
+                    }, 50);
+                });
+            }
+        });
     </script>
 </body>
 </html>
