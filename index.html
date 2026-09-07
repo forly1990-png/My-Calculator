@@ -5,13 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="高级明细计算器">
-    <title>高级明细计算器</title>
+    <meta name="apple-mobile-web-app-title" content="明细计算器">
+    <title>明细计算器</title>
     
-    <!-- 引入样式与离线 PDF 生成库 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     
     <style>
         body {
@@ -21,18 +18,27 @@
             padding-bottom: env(safe-area-inset-bottom);
         }
         input { font-size: 16px !important; }
+
+        /* 打印/导出 PDF 时的专门排版优化 */
+        @media print {
+            header, .no-print { display: none !important; }
+            body { background: white !important; color: black !important; }
+            .print-container { border: none !important; shadow: none !important; }
+            #itemList { max-height: none !important; overflow: visible !important; }
+            .item-card { border: 1px solid #e5e7eb !important; break-inside: avoid; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col font-sans">
 
     <!-- 顶部导航栏 -->
-    <header class="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-base font-bold flex items-center gap-1.5">🧮 多功能流水计算器</h1>
+    <header class="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center no-print">
+        <h1 class="text-base font-bold flex items-center gap-1.5">🧮 流水明细计算器</h1>
         <div class="flex gap-2">
-            <button onclick="exportPDF()" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-2.5 py-1.5 rounded-lg border border-indigo-400 font-medium transition">
-                📄 导出 PDF
+            <button onclick="window.print()" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded-lg border border-indigo-400 font-medium transition">
+                📄 保存 PDF
             </button>
-            <button onclick="clearAllRecords()" class="text-xs bg-red-500 hover:bg-red-600 px-2.5 py-1.5 rounded-lg font-medium transition">
+            <button onclick="clearAllRecords()" class="text-xs bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg font-medium transition">
                 清空
             </button>
         </div>
@@ -41,8 +47,8 @@
     <!-- 主体区域 -->
     <main class="flex-1 p-4 max-w-lg mx-auto w-full flex flex-col space-y-4">
 
-        <!-- 输入与运算操作区 -->
-        <div class="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-3">
+        <!-- 输入与运算操作区（打印时自动隐藏） -->
+        <div class="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-3 no-print">
             <div>
                 <input type="number" step="any" id="numberInput" placeholder="输入数字..." required class="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-xl font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
@@ -65,19 +71,25 @@
 
             <!-- 备注输入 -->
             <div>
-                <input type="text" id="remarkInput" placeholder="添加备注说明（选填）" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <input type="text" id="remarkInput" placeholder="添加备注说明（选填，如：肉糕、鳊鱼）" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
             </div>
         </div>
 
         <!-- 明细列表区域 -->
-        <div class="flex-1 bg-white rounded-2xl shadow-sm p-4 border border-gray-100 flex flex-col min-h-[300px]">
+        <div class="print-container bg-white rounded-2xl shadow-sm p-4 border border-gray-100 flex flex-col min-h-[300px]">
+            <!-- 打印时的专属抬头 -->
+            <div class="hidden print:block mb-4 border-b pb-2">
+                <h2 class="text-xl font-bold">计算明细清单</h2>
+                <p class="text-xs text-gray-500" id="printTime"></p>
+            </div>
+
             <div class="flex justify-between items-center pb-2 mb-2 border-b text-xs text-gray-400 font-medium">
                 <span>步骤 / 运算 / 备注</span>
                 <span>当前累积结果</span>
             </div>
 
             <!-- 列表容器 -->
-            <div id="itemList" class="flex-1 overflow-y-auto space-y-2 max-h-[45vh] pr-1">
+            <div id="itemList" class="flex-1 overflow-y-auto space-y-2 max-h-[50vh] pr-1">
                 <p class="text-center text-gray-400 text-sm py-12">暂无计算记录，请输入数字进行运算</p>
             </div>
         </div>
@@ -110,13 +122,12 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
         }
 
-        // 重新按顺序计算全局累加结果
         function calculateSequence(items) {
             let result = 0;
             return items.map((item, index) => {
                 const val = parseFloat(item.val);
                 if (index === 0) {
-                    result = val; // 第一笔为初始值
+                    result = val;
                 } else {
                     if (item.op === '+') result += val;
                     else if (item.op === '-') result -= val;
@@ -127,12 +138,16 @@
             });
         }
 
-        // 渲染页面
         function render() {
             const rawItems = getItems();
             const listEl = document.getElementById('itemList');
             const totalEl = document.getElementById('totalText');
             const countEl = document.getElementById('countText');
+            const printTimeEl = document.getElementById('printTime');
+
+            if (printTimeEl) {
+                printTimeEl.innerText = '生成时间：' + new Date().toLocaleString('zh-CN');
+            }
 
             if (rawItems.length === 0) {
                 listEl.innerHTML = '<p class="text-center text-gray-400 text-sm py-12">暂无计算记录，请输入数字进行运算</p>';
@@ -144,13 +159,10 @@
             const calculatedItems = calculateSequence(rawItems);
             const finalResult = calculatedItems[calculatedItems.length - 1].runningTotal;
 
-            // 显示时倒序排列，方便看最新操作
-            const displayItems = [...calculatedItems].reverse();
-
-            listEl.innerHTML = displayItems.map((item, displayIdx) => {
-                const originalIdx = calculatedItems.length - 1 - displayIdx;
+            // 显示按计算顺序从上到下排布，更符合阅读习惯
+            listEl.innerHTML = calculatedItems.map((item, idx) => {
                 const val = parseFloat(item.val);
-                const opText = originalIdx === 0 ? '初始' : item.op;
+                const opText = idx === 0 ? '初始' : item.op;
                 
                 let opBg = 'bg-gray-100 text-gray-700';
                 if (item.op === '+') opBg = 'bg-indigo-100 text-indigo-700';
@@ -159,20 +171,20 @@
                 if (item.op === '÷') opBg = 'bg-rose-100 text-rose-700';
 
                 return `
-                    <div class="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition">
+                    <div class="item-card flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
                         <div class="flex items-center gap-2.5">
                             <span class="w-7 h-7 rounded-lg ${opBg} text-xs font-bold flex items-center justify-center">${opText}</span>
                             <div>
                                 <div class="font-bold text-gray-800 text-sm">${item.op} ${val.toLocaleString()}</div>
-                                ${item.remark ? `<div class="text-[10px] text-gray-400">${item.remark}</div>` : ''}
+                                ${item.remark ? `<div class="text-xs text-gray-500 font-medium">${item.remark}</div>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
                             <div class="text-right">
-                                <div class="text-xs text-gray-400">结果</div>
+                                <div class="text-[10px] text-gray-400">结果</div>
                                 <div class="font-semibold text-gray-700 text-sm">${Number(item.runningTotal.toFixed(4)).toLocaleString()}</div>
                             </div>
-                            <button onclick="deleteItem(${originalIdx})" class="text-gray-300 hover:text-red-500 text-xs p-1">✕</button>
+                            <button onclick="deleteItem(${idx})" class="text-gray-300 hover:text-red-500 text-xs p-1 no-print">✕</button>
                         </div>
                     </div>
                 `;
@@ -182,7 +194,6 @@
             countEl.innerText = `共 ${rawItems.length} 步`;
         }
 
-        // 执行加减乘除
         function addOp(op) {
             const numInput = document.getElementById('numberInput');
             const remarkInput = document.getElementById('remarkInput');
@@ -211,49 +222,6 @@
                 localStorage.removeItem(STORAGE_KEY);
                 render();
             }
-        }
-
-        // 导出 PDF 功能
-        function exportPDF() {
-            const rawItems = getItems();
-            if (rawItems.length === 0) {
-                alert('暂无数据可导出！');
-                return;
-            }
-
-            const calculatedItems = calculateSequence(rawItems);
-            const finalResult = calculatedItems[calculatedItems.length - 1].runningTotal;
-
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-
-            // 标题
-            doc.setFontSize(16);
-            doc.text("计算明细与统计报表", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.text(`导出时间: ${new Date().toLocaleString('zh-CN')}`, 14, 28);
-            doc.text(`总步骤数: ${rawItems.length} 步`, 14, 34);
-            doc.text(`最终结果: ${Number(finalResult.toFixed(4)).toLocaleString()}`, 14, 40);
-
-            // 表格数据构建
-            const tableBody = calculatedItems.map((item, idx) => [
-                `第 ${idx + 1} 步`,
-                idx === 0 ? '初始数值' : item.op,
-                item.val,
-                item.remark || '-',
-                Number(item.runningTotal.toFixed(4)).toLocaleString()
-            ]);
-
-            doc.autoTable({
-                startY: 46,
-                head: [['步骤', '运算符', '输入数值', '备注说明', '当前结果']],
-                body: tableBody,
-                styles: { fontSize: 9 },
-                headStyles: { fillColor: [79, 70, 229] }
-            });
-
-            doc.save(`计算明细表_${new Date().toISOString().slice(0,10)}.pdf`);
         }
 
         window.onload = render;
