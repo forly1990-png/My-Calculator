@@ -6,9 +6,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="明细计算器">
-    <title>明细计算器</title>
+    <title>自定义键盘明细计算器</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <style>
         body {
@@ -17,66 +18,21 @@
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
         }
-        input { font-size: 18px !important; }
-
-        /* 📱 针对 iPhone 导出的专属大字号 & 隐藏网址打印样式 */
-        @media print {
-            /* 1. 隐藏系统默认页眉页脚（去除左下角网址） */
-            @page {
-                margin: 5mm; /* 极小边距，去除页眉网址和页脚页码 */
-                size: auto;
-            }
-            
-            /* 2. 隐藏无关的操作界面 */
-            header, .no-print { display: none !important; }
-
-            /* 3. 布局调整：适屏与超大字体 */
-            body { 
-                background: white !important; 
-                color: black !important;
-                padding: 10px !important;
-            }
-
-            .print-container { 
-                border: none !important; 
-                box-shadow: none !important; 
-                padding: 0 !important;
-                width: 100% !important;
-            }
-
-            #itemList { 
-                max-height: none !important; 
-                overflow: visible !important; 
-            }
-
-            /* 卡片样式加大 */
-            .item-card { 
-                border: 2px solid #e5e7eb !important; 
-                break-inside: avoid;
-                padding: 16px !important;
-                margin-bottom: 12px !important;
-                border-radius: 16px !important;
-            }
-
-            /* 字体全面加大，适配手机屏阅读 */
-            .print-title { font-size: 24px !important; font-weight: bold !important; }
-            .print-time { font-size: 14px !important; color: #666 !important; }
-            .print-op { font-size: 20px !important; font-weight: bold !important; }
-            .print-remark { font-size: 16px !important; color: #4b5563 !important; font-weight: bold !important; }
-            .print-result { font-size: 20px !important; font-weight: bold !important; }
-            .print-footer-label { font-size: 16px !important; }
-            .print-footer-total { font-size: 32px !important; font-weight: 900 !important; color: #4f46e5 !important; }
+        /* 虚拟键盘按键按下效果 */
+        .key-btn:active {
+            transform: scale(0.95);
+            filter: brightness(0.9);
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col font-sans">
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col font-sans select-none">
 
     <!-- 顶部导航栏 -->
-    <header class="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center no-print">
-        <h1 class="text-base font-bold flex items-center gap-1.5">🧮 流水明细计算器</h1>
+    <header class="bg-indigo-600 text-white p-3.5 shadow-md sticky top-0 z-10 flex justify-between items-center">
+        <h1 class="text-base font-bold flex items-center gap-1.5">🧮 专用键盘流水计算器</h1>
         <div class="flex gap-2">
-            <button id="pdfBtn" type="button" class="text-xs bg-indigo-700 active:bg-indigo-900 px-3 py-1.5 rounded-lg border border-indigo-400 font-medium transition">
-                📄 保存 PDF
+            <button onclick="generateImage()" class="text-xs bg-indigo-700 active:bg-indigo-900 px-3 py-1.5 rounded-lg border border-indigo-400 font-medium transition">
+                📸 生成明细图片
             </button>
             <button onclick="clearAllRecords()" class="text-xs bg-red-500 active:bg-red-700 px-3 py-1.5 rounded-lg font-medium transition">
                 清空
@@ -84,71 +40,113 @@
         </div>
     </header>
 
-    <!-- 主体区域 -->
-    <main class="flex-1 p-4 max-w-lg mx-auto w-full flex flex-col space-y-4">
+    <!-- 主体内容 -->
+    <main class="flex-1 p-3 max-w-lg mx-auto w-full flex flex-col space-y-3 pb-2">
 
-        <!-- 输入与运算操作区 -->
-        <div class="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-3 no-print">
-            <div>
-                <input type="number" step="any" id="numberInput" placeholder="输入数字..." required class="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-2xl font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <!-- 显示与控制区 -->
+        <div class="bg-white rounded-2xl shadow-sm p-3 border border-gray-100 space-y-2">
+            <!-- 当前正在输入的表达式屏幕 -->
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 flex flex-col justify-end min-h-[64px] text-right">
+                <div id="displayExpr" class="text-2xl font-black text-indigo-900 tracking-wide break-all">0</div>
+                <div id="displayRemarkShow" class="text-xs text-indigo-600 font-bold hidden">🏷️ 备注：<span id="remarkContent"></span></div>
             </div>
 
-            <div class="grid grid-cols-4 gap-2">
-                <button onclick="addOp('+')" class="bg-indigo-600 active:bg-indigo-700 text-white font-bold py-3 rounded-xl text-xl shadow transition">
-                    + 加
+            <!-- 备注按钮 -->
+            <div class="flex gap-2">
+                <button onclick="openRemarkModal()" class="flex-1 bg-amber-50 active:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl py-2 px-3 text-xs font-bold flex items-center justify-center gap-1.5">
+                    🏷️ <span id="remarkBtnText">添加中文备注（选填）</span>
                 </button>
-                <button onclick="addOp('-')" class="bg-emerald-600 active:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xl shadow transition">
-                    - 减
+                <button onclick="clearCurrentInput()" class="bg-gray-100 active:bg-gray-200 text-gray-600 rounded-xl px-3 py-2 text-xs font-bold">
+                    C 清屏
                 </button>
-                <button onclick="addOp('×')" class="bg-amber-500 active:bg-amber-600 text-white font-bold py-3 rounded-xl text-xl shadow transition">
-                    × 乘
-                </button>
-                <button onclick="addOp('÷')" class="bg-rose-500 active:bg-rose-600 text-white font-bold py-3 rounded-xl text-xl shadow transition">
-                    ÷ 除
-                </button>
-            </div>
-
-            <div>
-                <input type="text" id="remarkInput" placeholder="添加备注说明（如：肉糕、鳊鱼）" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
             </div>
         </div>
 
-        <!-- 明细列表区域 -->
-        <div class="print-container bg-white rounded-2xl shadow-sm p-4 border border-gray-100 flex flex-col min-h-[300px]">
-            <!-- PDF 打印专属的大字号页头 -->
-            <div class="hidden print:block mb-4 border-b pb-3">
-                <h2 class="print-title">计算明细清单</h2>
-                <p class="print-time mt-1" id="printTime"></p>
-            </div>
+        <!-- 自带实体虚拟按键面板（无需调用 iPhone 输入法） -->
+        <div class="bg-white rounded-2xl shadow-sm p-2.5 border border-gray-100 grid grid-cols-4 gap-2">
+            <!-- 第一排 -->
+            <button onclick="pressKey('(')" class="key-btn bg-gray-100 text-gray-700 font-bold py-3.5 rounded-xl text-xl shadow-sm">( </button>
+            <button onclick="pressKey(')')" class="key-btn bg-gray-100 text-gray-700 font-bold py-3.5 rounded-xl text-xl shadow-sm"> )</button>
+            <button onclick="pressKey('÷')" class="key-btn bg-rose-100 text-rose-700 font-bold py-3.5 rounded-xl text-xl shadow-sm">÷</button>
+            <button onclick="pressBackspace()" class="key-btn bg-rose-50 text-rose-600 font-bold py-3.5 rounded-xl text-lg shadow-sm">⌫ 退格</button>
 
+            <!-- 第二排 -->
+            <button onclick="pressKey('7')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">7</button>
+            <button onclick="pressKey('8')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">8</button>
+            <button onclick="pressKey('9')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">9</button>
+            <button onclick="pressKey('×')" class="key-btn bg-amber-100 text-amber-700 font-bold py-3.5 rounded-xl text-xl shadow-sm">×</button>
+
+            <!-- 第三排 -->
+            <button onclick="pressKey('4')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">4</button>
+            <button onclick="pressKey('5')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">5</button>
+            <button onclick="pressKey('6')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">6</button>
+            <button onclick="pressKey('-')" class="key-btn bg-emerald-100 text-emerald-700 font-bold py-3.5 rounded-xl text-xl shadow-sm">-</button>
+
+            <!-- 第四排 -->
+            <button onclick="pressKey('1')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">1</button>
+            <button onclick="pressKey('2')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">2</button>
+            <button onclick="pressKey('3')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">3</button>
+            <button onclick="pressKey('+')" class="key-btn bg-indigo-100 text-indigo-700 font-bold py-3.5 rounded-xl text-xl shadow-sm">+</button>
+
+            <!-- 第五排 -->
+            <button onclick="pressKey('0')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm col-span-2">0</button>
+            <button onclick="pressKey('.')" class="key-btn bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl text-2xl shadow-sm">.</button>
+            <button onclick="submitStep()" class="key-btn bg-indigo-600 active:bg-indigo-700 text-white font-black py-3.5 rounded-xl text-xl shadow-md">↵ 确认</button>
+        </div>
+
+        <!-- 流水明细列表卡片区 -->
+        <div id="captureArea" class="bg-white rounded-2xl shadow-sm p-3 border border-gray-100 flex flex-col min-h-[220px]">
             <div class="flex justify-between items-center pb-2 mb-2 border-b text-xs text-gray-400 font-medium">
-                <span>步骤 / 运算 / 备注</span>
-                <span>当前累积结果</span>
+                <span>序号 / 算式明细 / 备注</span>
+                <span>运行累积结果</span>
             </div>
 
-            <div id="itemList" class="flex-1 overflow-y-auto space-y-2 max-h-[50vh] pr-1">
-                <p class="text-center text-gray-400 text-sm py-12">暂无计算记录，请输入数字进行运算</p>
+            <div id="itemList" class="flex-1 space-y-2 max-h-[35vh] overflow-y-auto pr-1">
+                <p class="text-center text-gray-400 text-sm py-8">暂无计算记录，请使用上方键盘输入</p>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t flex justify-between items-center bg-indigo-50 -mx-3 -mb-3 p-3 rounded-b-2xl">
+                <div>
+                    <div class="text-[10px] text-gray-500">笔数统计</div>
+                    <div id="countText" class="text-sm font-bold text-gray-700">共 0 笔</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[10px] text-gray-500">最终累计总和</div>
+                    <div id="totalText" class="text-2xl font-black text-indigo-600">0</div>
+                </div>
             </div>
         </div>
 
     </main>
 
-    <!-- 底部固定汇总栏 -->
-    <footer class="bg-white border-t border-gray-200 p-4 sticky bottom-0 shadow-lg">
-        <div class="max-w-lg mx-auto flex justify-between items-center">
-            <div>
-                <div class="text-xs text-gray-500 print-footer-label">步骤统计</div>
-                <div id="countText" class="text-base font-bold text-gray-700">共 0 步</div>
-            </div>
-            <div class="text-right">
-                <div class="text-xs text-gray-500 print-footer-label">最终结果</div>
-                <div id="totalText" class="text-3xl font-black text-indigo-600 print-footer-total">0</div>
+    <!-- 输入备注弹窗（只有点击备注时才调用系统输入法） -->
+    <div id="remarkModal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-4 max-w-xs w-full space-y-3">
+            <h3 class="text-sm font-bold text-gray-800">📝 添加文字备注</h3>
+            <input type="text" id="modalRemarkInput" placeholder="输入备注（如：肉糕、鳊鱼）" class="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <div class="flex gap-2">
+                <button onclick="closeRemarkModal()" class="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-xl text-xs">取消</button>
+                <button onclick="saveRemark()" class="flex-1 bg-indigo-600 text-white font-bold py-2 rounded-xl text-xs">保存备注</button>
             </div>
         </div>
-    </footer>
+    </div>
+
+    <!-- 生成图片弹窗 -->
+    <div id="imageModal" class="fixed inset-0 bg-black/80 z-50 hidden flex-col items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-4 max-w-md w-full max-h-[85vh] flex flex-col items-center space-y-3">
+            <h3 class="text-base font-bold text-gray-800">🎉 明细单图片生成成功</h3>
+            <p class="text-xs text-indigo-600 font-semibold bg-indigo-50 px-3 py-1 rounded-full">👇 长按下方图片保存相册或发微信</p>
+            <div class="flex-1 overflow-y-auto w-full border rounded-xl p-1 bg-gray-50 flex justify-center">
+                <img id="generatedImg" class="max-w-full h-auto rounded-lg shadow-sm" alt="计算明细清单" />
+            </div>
+            <button onclick="closeImageModal()" class="w-full bg-gray-200 active:bg-gray-300 text-gray-800 font-bold py-2.5 rounded-xl text-sm">关闭</button>
+        </div>
+    </div>
 
     <script>
-        const STORAGE_KEY = 'offline_calc_advanced_items';
+        const STORAGE_KEY = 'offline_calc_keypad_items';
+        let currentExpr = '';
+        let currentRemark = '';
 
         function getItems() {
             return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -158,91 +156,111 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
         }
 
-        function calculateSequence(items) {
-            let result = 0;
-            return items.map((item, index) => {
-                const val = parseFloat(item.val);
-                if (index === 0) {
-                    result = val;
-                } else {
-                    if (item.op === '+') result += val;
-                    else if (item.op === '-') result -= val;
-                    else if (item.op === '×') result *= val;
-                    else if (item.op === '÷') result = val !== 0 ? result / val : result;
-                }
-                return { ...item, runningTotal: result };
-            });
+        // 安全计算字符串算式（支持 + - * / 和 括号）
+        function safeEval(exprStr) {
+            try {
+                let sanitized = exprStr.replace(/×/g, '*').replace(/÷/g, '/');
+                // 仅允许基础数学运算字符
+                if (/[^0-9\+\-\*\/\.\(\)\s]/.test(sanitized)) return null;
+                let res = Function(`'use strict'; return (${sanitized})`)();
+                return isFinite(res) ? res : null;
+            } catch (e) {
+                return null;
+            }
         }
 
-        function render() {
-            const rawItems = getItems();
-            const listEl = document.getElementById('itemList');
-            const totalEl = document.getElementById('totalText');
-            const countEl = document.getElementById('countText');
-            const printTimeEl = document.getElementById('printTime');
+        function updateDisplay() {
+            document.getElementById('displayExpr').innerText = currentExpr || '0';
+            const remarkShow = document.getElementById('displayRemarkShow');
+            const remarkContent = document.getElementById('remarkContent');
+            const remarkBtnText = document.getElementById('remarkBtnText');
 
-            if (printTimeEl) {
-                printTimeEl.innerText = '生成时间：' + new Date().toLocaleString('zh-CN');
+            if (currentRemark) {
+                remarkShow.classList.remove('hidden');
+                remarkContent.innerText = currentRemark;
+                remarkBtnText.innerText = `备注：${currentRemark}`;
+            } else {
+                remarkShow.classList.add('hidden');
+                remarkBtnText.innerText = '添加中文备注（选填）';
             }
+        }
 
-            if (rawItems.length === 0) {
-                listEl.innerHTML = '<p class="text-center text-gray-400 text-sm py-12">暂无计算记录，请输入数字进行运算</p>';
-                totalEl.innerText = '0';
-                countEl.innerText = '共 0 步';
+        function pressKey(key) {
+            currentExpr += key;
+            updateDisplay();
+        }
+
+        function pressBackspace() {
+            currentExpr = currentExpr.slice(0, -1);
+            updateDisplay();
+        }
+
+        function clearCurrentInput() {
+            currentExpr = '';
+            currentRemark = '';
+            updateDisplay();
+        }
+
+        function submitStep() {
+            if (!currentExpr) return;
+            const evalResult = safeEval(currentExpr);
+            if (evalResult === null) {
+                alert('表达式格式有误，请检查括号或符号！');
                 return;
             }
 
-            const calculatedItems = calculateSequence(rawItems);
-            const finalResult = calculatedItems[calculatedItems.length - 1].runningTotal;
-
-            listEl.innerHTML = calculatedItems.map((item, idx) => {
-                const val = parseFloat(item.val);
-                const opText = idx === 0 ? '初始' : item.op;
-                
-                let opBg = 'bg-gray-100 text-gray-700';
-                if (item.op === '+') opBg = 'bg-indigo-100 text-indigo-700';
-                if (item.op === '-') opBg = 'bg-emerald-100 text-emerald-700';
-                if (item.op === '×') opBg = 'bg-amber-100 text-amber-700';
-                if (item.op === '÷') opBg = 'bg-rose-100 text-rose-700';
-
-                return `
-                    <div class="item-card flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                        <div class="flex items-center gap-3">
-                            <span class="w-8 h-8 rounded-lg ${opBg} text-sm font-bold flex items-center justify-center">${opText}</span>
-                            <div>
-                                <div class="font-bold text-gray-800 text-base print-op">${item.op} ${val.toLocaleString()}</div>
-                                ${item.remark ? `<div class="text-sm text-gray-600 font-semibold mt-0.5 print-remark">🏷️ ${item.remark}</div>` : ''}
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <div class="text-right">
-                                <div class="text-[10px] text-gray-400">当前结果</div>
-                                <div class="font-bold text-gray-800 text-base print-result">${Number(item.runningTotal.toFixed(4)).toLocaleString()}</div>
-                            </div>
-                            <button onclick="deleteItem(${idx})" class="text-gray-300 hover:text-red-500 text-xs p-1 no-print">✕</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            totalEl.innerText = Number(finalResult.toFixed(4)).toLocaleString();
-            countEl.innerText = `共 ${rawItems.length} 步`;
-        }
-
-        function addOp(op) {
-            const numInput = document.getElementById('numberInput');
-            const remarkInput = document.getElementById('remarkInput');
-            const val = numInput.value;
-            if (!val) return;
-
             const items = getItems();
-            items.push({ op, val, remark: remarkInput.value.trim() });
+            items.push({
+                expr: currentExpr,
+                val: evalResult,
+                remark: currentRemark
+            });
             saveItems(items);
 
-            numInput.value = '';
-            remarkInput.value = '';
-            numInput.focus();
+            clearCurrentInput();
             render();
+        }
+
+        function render() {
+            const items = getItems();
+            const listEl = document.getElementById('itemList');
+            const totalEl = document.getElementById('totalText');
+            const countEl = document.getElementById('countText');
+
+            if (items.length === 0) {
+                listEl.innerHTML = '<p class="text-center text-gray-400 text-sm py-8">暂无计算记录，请使用上方键盘输入</p>';
+                totalEl.innerText = '0';
+                countEl.innerText = '共 0 笔';
+                return;
+            }
+
+            let runningTotal = 0;
+            const renderedItems = items.map((item, idx) => {
+                runningTotal += item.val;
+                return { ...item, runningTotal };
+            });
+
+            listEl.innerHTML = renderedItems.map((item, idx) => `
+                <div class="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+                        <div>
+                            <div class="font-bold text-gray-800 text-base">${item.expr}</div>
+                            ${item.remark ? `<div class="text-xs text-indigo-600 font-bold mt-0.5">🏷️ ${item.remark}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right">
+                            <div class="text-[10px] text-gray-400">当前累计</div>
+                            <div class="font-bold text-gray-800 text-base">${Number(item.runningTotal.toFixed(4)).toLocaleString()}</div>
+                        </div>
+                        <button onclick="deleteItem(${idx})" class="delete-btn text-gray-300 hover:text-red-500 text-xs p-1">✕</button>
+                    </div>
+                </div>
+            `).join('');
+
+            totalEl.innerText = Number(runningTotal.toFixed(4)).toLocaleString();
+            countEl.innerText = `共 ${items.length} 笔`;
         }
 
         function deleteItem(index) {
@@ -253,23 +271,62 @@
         }
 
         function clearAllRecords() {
-            if (confirm('确定要清空目前的计算明细吗？')) {
+            if (confirm('确定要清空所有计算记录吗？')) {
                 localStorage.removeItem(STORAGE_KEY);
+                clearCurrentInput();
                 render();
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            render();
-            const pdfBtn = document.getElementById('pdfBtn');
-            if (pdfBtn) {
-                pdfBtn.addEventListener('click', () => {
-                    setTimeout(() => {
-                        window.print();
-                    }, 50);
-                });
+        // 备注弹窗逻辑
+        function openRemarkModal() {
+            document.getElementById('modalRemarkInput').value = currentRemark;
+            document.getElementById('remarkModal').classList.remove('hidden');
+            document.getElementById('remarkModal').classList.add('flex');
+            setTimeout(() => document.getElementById('modalRemarkInput').focus(), 100);
+        }
+
+        function closeRemarkModal() {
+            document.getElementById('remarkModal').classList.remove('flex');
+            document.getElementById('remarkModal').classList.add('hidden');
+        }
+
+        function saveRemark() {
+            currentRemark = document.getElementById('modalRemarkInput').value.trim();
+            closeRemarkModal();
+            updateDisplay();
+        }
+
+        // 生成超清图片
+        function generateImage() {
+            const items = getItems();
+            if (items.length === 0) {
+                alert('暂无记录可生成！');
+                return;
             }
-        });
+
+            document.querySelectorAll('.delete-btn').forEach(btn => btn.style.display = 'none');
+            const captureArea = document.getElementById('captureArea');
+            const listEl = document.getElementById('itemList');
+            const originalMaxHeight = listEl.style.maxHeight;
+            listEl.style.maxHeight = 'none';
+
+            html2canvas(captureArea, { scale: 3, backgroundColor: '#ffffff' }).then(canvas => {
+                document.querySelectorAll('.delete-btn').forEach(btn => btn.style.display = 'block');
+                listEl.style.maxHeight = originalMaxHeight;
+
+                document.getElementById('generatedImg').src = canvas.toDataURL('image/png');
+                document.getElementById('imageModal').classList.remove('hidden');
+                document.getElementById('imageModal').classList.add('flex');
+            });
+        }
+
+        function closeImageModal() {
+            document.getElementById('imageModal').classList.remove('flex');
+            document.getElementById('imageModal').classList.add('hidden');
+        }
+
+        window.onload = render;
     </script>
 </body>
 </html>
